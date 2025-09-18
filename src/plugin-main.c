@@ -14,7 +14,7 @@ See <https://www.gnu.org/licenses/> for more details.
 
 #include <obs-module.h>
 #include <plugin-support.h>
-#include "pcm_visualizer.h"   /* unser Header */
+#include "pcm_visualizer.h" /* unser Header */
 
 OBS_DECLARE_MODULE();
 OBS_MODULE_USE_DEFAULT_LOCALE(PLUGIN_NAME, "en-US");
