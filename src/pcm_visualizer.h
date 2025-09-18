@@ -1,11 +1,14 @@
 #pragma once
+#include <stdint.h>
 #include <obs-module.h>
+
 struct pcmvis {
-    obs_source_t *source = nullptr;
-    float t = 0.0f;
-    gs_vertbuffer_t *vbuf = nullptr;
-    gs_effect_t *effect = nullptr;
-    gs_eparam_t *ep_color = nullptr;
-    uint32_t color = 0xFFFFFFFF;  // RGBA
+	obs_source_t *source;
+	float t;
+	void *vbuf;       /* gs_vertbuffer_t* */
+	void *effect;     /* gs_effect_t* */
+	void *ep_color;   /* gs_eparam_t* */
+	uint32_t color;   /* RGBA */
 };
+
 extern struct obs_source_info pcmvis_info;
