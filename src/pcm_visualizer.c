@@ -1,6 +1,10 @@
 #include "pcm_visualizer.h"
+
+/* GS / GFX */
 #include <graphics/graphics.h>
+#include <graphics/vec3.h>
 #include <graphics/vec4.h>
+#include <math.h>
 
 static const char *pcmvis_get_name(void *unused)
 {
@@ -23,7 +27,7 @@ static void *pcmvis_create(obs_data_t *settings, obs_source_t *source)
 	s->source = source;
 	s->t = 0.0f;
 
-	/* Built-in solid color effect (OBS stellt das bereit) */
+	/* Built-in solid effect */
 	s->effect = obs_get_base_effect(OBS_EFFECT_SOLID);
 	s->ep_color = gs_effect_get_param_by_name((gs_effect_t *)s->effect, "color");
 
@@ -39,15 +43,23 @@ static void pcmvis_destroy(void *data)
 	bfree(s);
 }
 
-static uint32_t pcmvis_get_width(void *data)
+static uint32_t pcmvis_get_width(void *data)  { UNUSED_PARAMETER(data); return 800; }
+static uint32_t pcmvis_get_height(void *data) { UNUSED_PARAMETER(data); return 200; }
+
+/* Hilfsfunktion: neuen VB aus Rohdaten bauen (API-konform) */
+static gs_vertbuffer_t *build_vb_from_arrays(struct vec3 *pts, uint32_t *cols, size_t n)
 {
-	UNUSED_PARAMETER(data);
-	return 800;
-}
-static uint32_t pcmvis_get_height(void *data)
-{
-	UNUSED_PARAMETER(data);
-	return 200;
+	struct gs_vb_data *vb = gs_vbdata_create();
+	if (!vb)
+		return NULL;
+
+	vb->num = (uint32_t)n;
+	vb->points = bmemdup(pts, sizeof(struct vec3) * n);
+	vb->colors = bmemdup(cols, sizeof(uint32_t) * n);
+
+	gs_vertbuffer_t *vbuf = gs_vertexbuffer_create(vb, GS_DYNAMIC);
+	gs_vbdata_destroy(vb);
+	return vbuf;
 }
 
 static void pcmvis_video_render(void *data, gs_effect_t *effect)
@@ -60,35 +72,33 @@ static void pcmvis_video_render(void *data, gs_effect_t *effect)
 
 	const size_t N = 1024;
 
-	/* VB pro Frame frisch anlegen (simpel & CI-sicher fürs Skeleton) */
-	if (s->vbuf)
-		gs_vertexbuffer_destroy((gs_vertbuffer_t *)s->vbuf);
-	struct gs_vertex *verts = (struct gs_vertex *)bzalloc(sizeof(struct gs_vertex) * N);
-	s->vbuf = gs_vertexbuffer_create(verts, (uint32_t)N, GS_DYNAMIC);
-	bfree(verts);
-
-	struct gs_vb_data *map = gs_vertexbuffer_map((gs_vertbuffer_t *)s->vbuf);
-	if (!map)
-		return;
+	/* Punkte + Farben vorbereiten (CPU) */
+	struct vec3 *pts = (struct vec3 *)bzalloc(sizeof(struct vec3) * N);
+	uint32_t *cols = (uint32_t *)bzalloc(sizeof(uint32_t) * N);
 
 	const float mid = (float)H * 0.5f;
 	const float amp = (float)H * 0.4f;
 	s->t += 0.03f;
 
-	struct vec4 col;
-	vec4_from_rgba(&col, s->color);
-
-	/* map->points / map->colors sind die üblichen Felder */
 	for (size_t i = 0; i < N; i++) {
 		float x = (float)i / (float)(N - 1);
-		float y = sinf((x + s->t) * 6.28318f * 2.0f);
-
-		map->points[i].x = x * (float)W;
-		map->points[i].y = mid + y * amp;
-		map->points[i].z = 0.0f;
-		map->colors[i] = col;
+		float y = sinf((x + s->t) * 6.28318f * 2.0f); /* 2 cycles */
+		pts[i].x = x * (float)W;
+		pts[i].y = mid + y * amp;
+		pts[i].z = 0.0f;
+		cols[i] = s->color; /* uint32_t erwartet */
 	}
-	gs_vertexbuffer_unmap((gs_vertbuffer_t *)s->vbuf);
+
+	/* alten VB weg, neuen aus Arrays bauen (einfach & CI-sicher) */
+	if (s->vbuf)
+		gs_vertexbuffer_destroy((gs_vertbuffer_t *)s->vbuf);
+	s->vbuf = build_vb_from_arrays(pts, cols, N);
+
+	bfree(pts);
+	bfree(cols);
+
+	if (!s->vbuf)
+		return;
 
 	gs_reset_blend_state();
 	gs_matrix_push();
@@ -99,8 +109,12 @@ static void pcmvis_video_render(void *data, gs_effect_t *effect)
 	gs_technique_t *tech = gs_effect_get_technique((gs_effect_t *)s->effect, "Solid");
 	gs_technique_begin(tech);
 	gs_technique_begin_pass(tech, 0);
-	gs_effect_set_color((gs_eparam_t *)s->ep_color, &col);
+
+	/* erwartet uint32_t */
+	gs_effect_set_color((gs_eparam_t *)s->ep_color, s->color);
+
 	gs_draw(GS_LINESTRIP, 0, (uint32_t)N);
+
 	gs_technique_end_pass(tech);
 	gs_technique_end(tech);
 
@@ -137,5 +151,5 @@ struct obs_source_info pcmvis_info = {
 	.video_render = pcmvis_video_render,
 	.get_properties = pcmvis_properties,
 	.get_defaults = pcmvis_defaults,
-	.icon_type = OBS_ICON_TYPE_AUDIOWAVEFORM,
+	/* .icon_type weggelassen – nicht überall vorhanden */
 };
