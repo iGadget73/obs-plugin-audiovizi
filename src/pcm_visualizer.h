@@ -5,10 +5,10 @@
 struct pcmvis {
 	obs_source_t *source;
 	float t;
-	void *vbuf;       /* gs_vertbuffer_t* */
-	void *effect;     /* gs_effect_t* */
-	void *ep_color;   /* gs_eparam_t* */
-	uint32_t color;   /* RGBA 0xAARRGGBB */
+	void *vbuf;
+	void *effect;
+	void *ep_color;
+	uint32_t color;
 };
 
 extern struct obs_source_info pcmvis_info;
